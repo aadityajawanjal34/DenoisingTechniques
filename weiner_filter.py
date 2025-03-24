@@ -4,41 +4,22 @@ import librosa
 import librosa.display
 import soundfile as sf
 import matplotlib.pyplot as plt
-from scipy.signal import stft, istft
+from scipy.signal import stft, istft, wiener  # Keep wiener
 from sklearn.metrics import mean_squared_error
 
-# Function to perform Spectral Subtraction
-def spectral_subtraction(noisy_audio, noise_profile, n_fft=2048, hop_length=512):
+# Function to perform Wiener Filter denoising
+def wiener_filter(noisy_audio):
     """
-    Apply Spectral Subtraction to denoise the audio.
+    Apply Wiener Filter to denoise the audio.
     
     Parameters:
         noisy_audio (np.array): The noisy audio signal.
-        noise_profile (np.array): The noise profile (magnitude spectrum of noise).
-        n_fft (int): FFT window size.
-        hop_length (int): Hop length for STFT.
     
     Returns:
         denoised_audio (np.array): The denoised audio signal.
     """
-    # Compute the STFT of the noisy audio
-    f, t, Zxx = stft(noisy_audio, nperseg=n_fft, noverlap=hop_length)
-    
-    # Compute the magnitude of the STFT
-    magnitude = np.abs(Zxx)
-    
-    # Expand noise_profile to match the shape of magnitude
-    noise_profile_expanded = np.expand_dims(noise_profile, axis=1)
-    
-    # Subtract the noise profile from the magnitude
-    denoised_magnitude = np.maximum(magnitude - noise_profile_expanded, 0)
-    
-    # Reconstruct the denoised STFT
-    denoised_Zxx = denoised_magnitude * np.exp(1j * np.angle(Zxx))
-    
-    # Compute the inverse STFT to get the denoised audio
-    _, denoised_audio = istft(denoised_Zxx, nperseg=n_fft, noverlap=hop_length)
-    
+    # Apply Wiener Filter in the time domain
+    denoised_audio = wiener(noisy_audio)
     return denoised_audio
 
 # Function to calculate SNR
@@ -101,10 +82,10 @@ def plot_and_save_combined_spectrogram(clean_audio, noisy_audio, denoised_audio,
     plt.close()
 
 # Create the denoised_auds and spectral_sub_spec folders if they don't exist
-if not os.path.exists('spectral_sub_denoised_auds'):
-    os.makedirs('spectral_sub_denoised_auds')
-if not os.path.exists('spectral_sub_spec'):
-    os.makedirs('spectral_sub_spec')
+if not os.path.exists('weiner_filter_denoised_auds'):
+    os.makedirs('weiner_filter_denoised_auds')
+if not os.path.exists('weiner_filter_spec'):
+    os.makedirs('weiner_filter_spec')
 
 # Initialize lists to store evaluation metrics
 mse_values = []
@@ -121,19 +102,15 @@ for file in files:
     clean_audio, sr = librosa.load(os.path.join('filtered_auds', file), sr=None)
     noisy_audio, _ = librosa.load(os.path.join('filtered_auds_augmented', file), sr=sr)
 
-    # Estimate noise profile (assuming the first few frames are noise)
-    _, _, Zxx_noise = stft(noisy_audio[:2048], nperseg=2048, noverlap=512)
-    noise_profile = np.mean(np.abs(Zxx_noise), axis=1)
-
-    # Apply Spectral Subtraction
-    denoised_audio = spectral_subtraction(noisy_audio, noise_profile)
+    # Apply Wiener Filter
+    denoised_audio = wiener_filter(noisy_audio)
 
     # Save the denoised audio in the denoised_auds folder
-    output_audio_file = os.path.join('spectral_sub_denoised_auds', file.replace('.flac', '.wav'))
+    output_audio_file = os.path.join('weiner_filter_denoised_auds', file.replace('.flac', '.wav'))
     sf.write(output_audio_file, denoised_audio, sr)
 
     # Save the combined spectrogram in the spectral_sub_spec folder
-    output_spectrogram_file = os.path.join('spectral_sub_spec', file.replace('.flac', '.jpg'))
+    output_spectrogram_file = os.path.join('weiner_filter_spec', file.replace('.flac', '.jpg'))
     plot_and_save_combined_spectrogram(clean_audio, noisy_audio, denoised_audio, sr, output_spectrogram_file)
 
     # Evaluate using MSE, SNR, and MFCC comparison

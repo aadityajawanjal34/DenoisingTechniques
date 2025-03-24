@@ -7,14 +7,15 @@ import matplotlib.pyplot as plt
 from scipy.signal import stft, istft
 from sklearn.metrics import mean_squared_error
 
-# Function to perform Spectral Subtraction
-def spectral_subtraction(noisy_audio, noise_profile, n_fft=2048, hop_length=512):
+# Function to perform Spectral Gating
+def spectral_gating(noisy_audio, noise_profile, threshold=1.5, n_fft=2048, hop_length=512):
     """
-    Apply Spectral Subtraction to denoise the audio.
+    Apply Spectral Gating to denoise the audio.
     
     Parameters:
         noisy_audio (np.array): The noisy audio signal.
         noise_profile (np.array): The noise profile (magnitude spectrum of noise).
+        threshold (float): The threshold for noise suppression (default: 1.5).
         n_fft (int): FFT window size.
         hop_length (int): Hop length for STFT.
     
@@ -30,8 +31,9 @@ def spectral_subtraction(noisy_audio, noise_profile, n_fft=2048, hop_length=512)
     # Expand noise_profile to match the shape of magnitude
     noise_profile_expanded = np.expand_dims(noise_profile, axis=1)
     
-    # Subtract the noise profile from the magnitude
-    denoised_magnitude = np.maximum(magnitude - noise_profile_expanded, 0)
+    # Apply spectral gating: suppress frequencies below the threshold
+    threshold_mask = magnitude > (threshold * noise_profile_expanded)
+    denoised_magnitude = magnitude * threshold_mask
     
     # Reconstruct the denoised STFT
     denoised_Zxx = denoised_magnitude * np.exp(1j * np.angle(Zxx))
@@ -100,11 +102,11 @@ def plot_and_save_combined_spectrogram(clean_audio, noisy_audio, denoised_audio,
     plt.savefig(filename)
     plt.close()
 
-# Create the denoised_auds and spectral_sub_spec folders if they don't exist
-if not os.path.exists('spectral_sub_denoised_auds'):
-    os.makedirs('spectral_sub_denoised_auds')
-if not os.path.exists('spectral_sub_spec'):
-    os.makedirs('spectral_sub_spec')
+# Create the spectral_gating_denoised_auds and spectral_gating_spec folders if they don't exist
+if not os.path.exists('spectral_gating_denoised_auds'):
+    os.makedirs('spectral_gating_denoised_auds')
+if not os.path.exists('spectral_gating_spec'):
+    os.makedirs('spectral_gating_spec')
 
 # Initialize lists to store evaluation metrics
 mse_values = []
@@ -125,15 +127,15 @@ for file in files:
     _, _, Zxx_noise = stft(noisy_audio[:2048], nperseg=2048, noverlap=512)
     noise_profile = np.mean(np.abs(Zxx_noise), axis=1)
 
-    # Apply Spectral Subtraction
-    denoised_audio = spectral_subtraction(noisy_audio, noise_profile)
+    # Apply Spectral Gating
+    denoised_audio = spectral_gating(noisy_audio, noise_profile, threshold=1.5)
 
-    # Save the denoised audio in the denoised_auds folder
-    output_audio_file = os.path.join('spectral_sub_denoised_auds', file.replace('.flac', '.wav'))
+    # Save the denoised audio in the spectral_gating_denoised_auds folder
+    output_audio_file = os.path.join('spectral_gating_denoised_auds', file.replace('.flac', '.wav'))
     sf.write(output_audio_file, denoised_audio, sr)
 
-    # Save the combined spectrogram in the spectral_sub_spec folder
-    output_spectrogram_file = os.path.join('spectral_sub_spec', file.replace('.flac', '.jpg'))
+    # Save the combined spectrogram in the spectral_gating_spec folder
+    output_spectrogram_file = os.path.join('spectral_gating_spec', file.replace('.flac', '.jpg'))
     plot_and_save_combined_spectrogram(clean_audio, noisy_audio, denoised_audio, sr, output_spectrogram_file)
 
     # Evaluate using MSE, SNR, and MFCC comparison
